@@ -5,7 +5,7 @@ ifeq "$(strip ${TARGET_DIR})" ""
   TARGET_DIR   := ../$(OSTYPE)-$(MACHINETYPE)/bin
 endif
 
-TARGET   := fec
+TARGET   := Fec
 SOURCES  := main.cpp \
 	dw.cpp \
 	FEC_AlnGraphBoost.C \
