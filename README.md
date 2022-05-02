@@ -1,7 +1,7 @@
 # Fec
-Fec is a error correction tool based on two-rounds overlapping and cacheing. The first round overlapping will find a number of overlaps quickly. Based on the overlaps, some reads can be corrected immediately, and the rest reads will be performed the second round overlapping sensititively to find as more overlaps as possible.
+Fec is a error correction tool based on two-rounds overlapping and caching. The first round overlapping will find a number of overlaps quickly. Based on the overlaps, some reads can be corrected immediately, and the rest reads will be performed the second-round overlapping using finely tuned to find as more overlaps as possible.
 ## Dependencies
-A compiler that supports C++11 is needed to build nanopolish. Development of the code is performed using [gcc-10.1](https://gcc.gnu.org/gcc-10/).
+A compiler that supports C++11 is needed to build Fec. Development of the code is performed using [gcc-10.1](https://gcc.gnu.org/gcc-10/).
 - [minimap2-c9874e2](https://github.com/lh3/minimap2/)
 ## Installation instructions
 - ### Install Fec from github
@@ -19,7 +19,7 @@ git clone https://github.com/lh3/minimap2.git
 cd minimap2
 git checkout c9874e2
 make
-export PATH=pwd:$PATH
+export PATH=`pwd`:$PATH
 ```
 ## Usage
 For small datasets:

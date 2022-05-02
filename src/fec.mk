@@ -13,7 +13,18 @@ SOURCES  := main.cpp \
 	options.cpp \
 	reads_correction_aux.cpp \
 	reads_correction_can.cpp \
-	overlaps_check.cpp
+	overlaps_check.cpp \
+	nanopore/Fec_extension.cpp \
+	nanopore/edlib_wrapper.c \
+	nanopore/edlib_ex.c \
+	nanopore/edlib_ex_aux.c \
+	nanopore/Fec_aligner.c \
+	nanopore/align.c \
+	nanopore/Fec_daligner.c \
+	nanopore/edlib.cpp \
+	nanopore/kalloc.c \
+	nanopore/kstring.c \
+	nanopore/util.c 
 
 SRC_INCDIRS  := . libboost
 

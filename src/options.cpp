@@ -7,37 +7,40 @@
 
 using namespace std;
 
-static int num_threads = 1;
-static index_t batch_size = 100000;
-static double mapping_ratio = 0.6;
-static int align_size = 1000;
-static int cov = 4;
-static int min_size = 2000;
-static bool print_usage = false;
+static int num_threads         = 1;
+static index_t batch_size      = 100000;
+static double mapping_ratio    = 0.6;
+static int align_size          = 1000;
+static int cov                 = 4;
+static int min_size            = 2000;
+static bool print_usage        = false;
 static int num_partition_files = 100;
-static char* overlap_filter = "0.6";
-static int cache = 1;
-static int second_overlapping = 1;
+static char* overlap_filter    = "0.6";
+static int cache               = 1;
+static int second_overlapping  = 1;
 
-int MINIMAP2_k = 19;
-int MINIMAP2_w = 5;
+int MINIMAP2_k   = 19;
+int MINIMAP2_w   = 5;
 float MINIMAP2_f = 0.0002;
 
-static const char num_threads_n   = 't';
-static const char batch_size_n    = 'p';
-static const char mapping_ratio_n = 'r';
-static const char align_size_n    = 'a';
-static const char cov_n           = 'c';
-static const char min_size_n      = 'l';
-static const char usage_n         = 'h';
+static const char tech_n                = 'x';
+static const char num_threads_n         = 't';
+static const char batch_size_n          = 'p';
+static const char mapping_ratio_n       = 'r';
+static const char align_size_n          = 'a';
+static const char cov_n                 = 'c';
+static const char min_size_n            = 'l';
+static const char usage_n               = 'h';
 static const char num_partition_files_n = 'k';
-static const char cache_n		='e';
-static const char second_overlapping_n = 's';
-static const char minimap_filter_n = 'm';
-static const char overlap_filter_n = 'f';
-static const char kmer_n = 'K';
-static const char window_n = 'w';
-static const char hpc_n = 'H';
+static const char cache_n		        = 'e';
+static const char second_overlapping_n  = 's';
+static const char minimap_filter_n      = 'm';
+static const char overlap_filter_n      = 'f';
+static const char kmer_n                = 'K';
+static const char window_n              = 'w';
+static const char hpc_n                 = 'H';
+static const char recuse_n				= 'R';
+static const char full_n				= 'F';
 
 void print_default_options() {
 	cerr << '-' << num_threads_n << ' ' << num_threads 
@@ -67,6 +70,10 @@ void print_default_options() {
 		 << '-' << window_n << ' ' << MINIMAP2_w 
 		 << ' ' 
 		 << '-' << hpc_n 
+		 << ' '  
+		 << '-' << recuse_n 
+		 << ' ' 
+		 << '-' << full_n
 		 <<"\n";
 }
 
@@ -75,6 +82,8 @@ void Usage(const char* prog) {
 		 << prog << ' ' << "[options]" << ' ' << "input" << ' ' << "reads" << ' ' << "output" << "\n";
 	cerr << "\n" << "OPTIONS:" << "\n";
 	
+	cerr << "-" << tech_n << " <0/1>\t" << "data type: 0 = PacBio, 1 = Nanopore" << "\n";
+
 	cerr << "-" << num_threads_n << " <Integer>\t" << "number of threads (CPUs)" << "\n";
 	
 	cerr << "-" << batch_size_n << " <Integer>\t" << "batch size that the reads will be partitioned" << "\n";
@@ -88,23 +97,27 @@ void Usage(const char* prog) {
 	cerr << "-" << min_size_n << " <Integer>\t" << "minimum length of corrected sequence" << "\n";
 	
 	cerr << "-" << num_partition_files_n << " <Integer>\t" 
-		 << "number of partition files when partitioning overlap results" 
+		 << "number of partition files to open at one time" 
 		 << " (if < 0, then it will be set to system limit value)"
 		 << "\n";
 
-	cerr << "-" << cache_n << " <Integer>\t" << "use cache or not: 0 not use, 1 use" << "\n";
+	cerr << "-" << cache_n << " <Integer>\t" << "use cache or not: 0 = not use, 1 = use" << "\n";
 
-	cerr << "-" << second_overlapping_n << " <Integer>\t" << "perform second overlapping: 0 no, 1 yes" << "\n";
+	cerr << "-" << second_overlapping_n << " <Integer>\t" << "perform second-round overlapping or not: 0 = not perform, 1 = perform" << "\n";
 	
-	cerr << "-" << minimap_filter_n << " <String>\t" << "the second round minimap command" <<"\n";
+	cerr << "-" << minimap_filter_n << " <String>\t" << "filter out top fraction repetitive minimizers of the second-round overlapping" <<"\n";
 
-	cerr << "-" << overlap_filter_n << " <String>\t" << "command to filter overlaps" <<"\n";
+	cerr << "-" << overlap_filter_n << " <String>\t" << "minimum overlap ratio used for the second-round overlapping filtering" <<"\n";
 
-	cerr << "-" << kmer_n << " <Integer>\t" << "kmer length used in minimap2" <<"\n";
+	cerr << "-" << kmer_n << " <Integer>\t" << "k-mer size or the second-round overlapping" <<"\n";
 
-	cerr << "-" << window_n << " <Integer>\t" << "window used in minimap2" <<"\n";
+	cerr << "-" << window_n << " <Integer>\t" << "minimizer window size for the second-round overlapping" <<"\n";
 
-	cerr << "-" << hpc_n << "\t\thomopolymen compress used in minimap2" <<"\n";
+	cerr << "-" << hpc_n << "\t\tuse homopolymer-compressed k-mer for the second-round overlapping" <<"\n";
+
+	cerr << "-" << recuse_n << "\t\tresuse long indel\n";
+
+	cerr << "-" << full_n << "\t\tfull consensus\n";
 
 	cerr << "-" << usage_n << "\t\t" << "print usage info." << "\n";
 	
@@ -112,36 +125,89 @@ void Usage(const char* prog) {
 	print_default_options();
 }
 
-ConsensusOptions init_consensus_options() {
+ConsensusOptions init_consensus_options(int tech) {
 	ConsensusOptions t;
-	t.m4                    = NULL;
-	t.reads                 = NULL;
-	t.corrected_reads       = NULL;
-	t.num_threads           = num_threads;
-	t.batch_size            = batch_size;
-	t.min_mapping_ratio     = mapping_ratio;
-	t.min_align_size        = align_size;
-	t.min_cov               = cov;
-	t.min_size              = min_size;
-	t.print_usage_info      = print_usage;
-	t.num_partition_files 	= num_partition_files;
-	t.cache				= cache;
-	t.second_overlapping = second_overlapping;
-	t.overlap_filter = overlap_filter;
-	t.minimap2_command = "minimap2 ";
+	if(tech == '0') {
+		t.m4                    = NULL;
+		t.reads                 = NULL;
+		t.corrected_reads       = NULL;
+		t.num_threads           = num_threads;
+		t.batch_size            = batch_size;
+		t.min_mapping_ratio     = mapping_ratio;
+		t.min_align_size        = align_size;
+		t.min_cov               = cov;
+		t.min_size              = min_size;
+		t.print_usage_info      = print_usage;
+		t.num_partition_files 	= num_partition_files;
+		t.cache				    = cache;
+		t.second_overlapping    = second_overlapping;
+		t.overlap_filter        = overlap_filter;
+		t.minimap2_command      = "minimap2 ";
+		t.tech                  = 0;
+		t.resuce_long_indel		= false;
+		t.full					= false;
+	} else {
+		t.m4                    = NULL;
+		t.reads                 = NULL;
+		t.corrected_reads       = NULL;
+		t.num_threads           = num_threads;
+		t.batch_size            = batch_size;
+		t.min_mapping_ratio     = 0.8;  //0.4
+		t.min_align_size        = 2000; //400
+		t.min_cov               = 4;
+		t.min_size              = 1000; //2000
+		t.print_usage_info      = print_usage;
+		t.num_partition_files 	= num_partition_files;
+		t.cache				    = cache;
+		t.second_overlapping    = second_overlapping;
+		t.overlap_filter        = overlap_filter;
+		t.minimap2_command      = "minimap2 ";
+		t.tech                  = 1;
+		MINIMAP2_k              = 15;
+		t.resuce_long_indel		= false;
+		t.full					= false;
+	}
     return t;
+}
+
+int detect_tech(int argc, char* argv[]) {
+	int t = 0;
+	char tech_nstr[64];
+	tech_nstr[0] = '-';
+	tech_nstr[1] = tech_n;
+	tech_nstr[2] = '\0';
+	for(int i = 0; i < argc; ++i) {
+		if(strcmp(tech_nstr, argv[i]) == 0) {
+			if(i + 1 == argc) {
+				std::cerr << "argument to option " << tech_n << " is missing\n";
+				t = -1;
+			}
+			if(argv[i + 1][0] == '0') {
+				t = 0;
+			} else if(argv[i + 1][0] == '1') {
+				t = 1;
+			} else {
+				std::cerr << "invalid argument to option " << tech_n << " : " << argv[i + 1] <<"\n";
+				t = -1;
+			}
+			break;
+		}
+	}
+	return t;
 }
 
 int
 parse_arguments(int argc, char* argv[], ConsensusOptions& t)
 {
 	bool parse_success = true;
-	t = init_consensus_options();
+	int tech = detect_tech(argc, argv);
+	if(tech == -1) return 1;
+	t = init_consensus_options(tech);
 	
 	int opt_char;
     char err_char;
     opterr = 0;
-	while((opt_char = getopt(argc, argv, "i:e:s:t:p:r:a:c:l:k:m:K:w:f:hH")) != -1) {
+	while((opt_char = getopt(argc, argv, "i:e:s:t:p:r:a:c:l:k:m:K:w:x:f:hRFH")) != -1) {
 		switch (opt_char) {
 			case cache_n:
 				if(optarg[0] == '0')
@@ -153,6 +219,15 @@ parse_arguments(int argc, char* argv[], ConsensusOptions& t)
 					return 1;
 				}
 				break;
+			case tech_n:
+				if(optarg[0] == '0')
+					t.tech = 0;
+				else if(optarg[0] == '1')
+					t.tech = 1;
+				else{
+					fprintf(stderr, "invalid argument to option '%c': %s\n", tech_n, optarg);
+					return 1;
+				}
 			case second_overlapping_n:
 				if(optarg[0] == '0')
 					t.second_overlapping = 0;
@@ -162,6 +237,12 @@ parse_arguments(int argc, char* argv[], ConsensusOptions& t)
 					fprintf(stderr, "invalid argument to option '%c': %s\n", second_overlapping_n, optarg);
 					return 1;
 				}
+				break;
+			case recuse_n:
+				t.resuce_long_indel = true;
+				break;
+			case full_n:
+				t.full = true;
 				break;
 			case num_threads_n:
 				t.num_threads = atoi(optarg);
@@ -269,5 +350,7 @@ print_options(ConsensusOptions& t)
 	cout << "use cache:\t" << t.cache << "\n";
 	cout << "perform second overlapping:\t" << t.second_overlapping << "\n";
 	cout << "filter command:\t" << t.overlap_filter << "\n";
+	cout << "rescuse long indel:\t" << t.resuce_long_indel << "\n";
+	cout << "full consensus:\t" << t.full << "\n";
 	cout << "minimap2 command:\t" << t.minimap2_command << "\n";
 }

@@ -91,7 +91,11 @@ reads_correction_func_can(void* arg)
         while (j < num_candidates && candidates[j].sid == sid) ++j;
         if (j - i < cns_data.rco.min_cov) { i = j; continue; }
         if (candidates[i].ssize < cns_data.rco.min_size * 0.95) { i = j; continue; }
-		ns_meap_cns::consensus_one_read_can(&cns_data, sid, i, j);
+		if(cns_data.rco.tech == 0) {
+			ns_meap_cns::consensus_one_read_can(&cns_data, sid, i, j);
+		} else {
+			ns_meap_cns::consensus_one_read_can_nanopore(&cns_data, sid, i, j);
+		}
 		if (cns_data.cns_results.size() >= MAX_CNS_RESULTS)
 		{
 			pthread_mutex_lock(&cns_data.out_lock);
@@ -221,16 +225,8 @@ consensus_one_partition_can(const char* m4_file_name,
 
 static void
 partition_can_cache(PackedDB& reads, const char* reads_file, const char* m4_path, const int batch_size, const int min_size, const int num_partition_files, const int min_cov, const double min_cov_ratio, const int threads, std::vector<std::string> &names, std::unordered_map<std::string, std::array<int, 2>>& name2id, bool use_cache, bool so, const char* mmc, const char* of)
-{
-	char job_finished[2048];
-	sprintf(job_finished, "%s.partition_finished", m4_path);
-	if (access(job_finished, F_OK) == 0) {
-		fprintf(stderr, "Partition Candidates Has Been Finished, Skipt It.\n");
-		return;
-	}
+{	
 	partition_paf(reads, reads_file, m4_path, min_cov_ratio, batch_size, min_size, num_partition_files, min_cov, threads, names, name2id, use_cache, so, mmc, of);
-	FILE* out = fopen(job_finished, "w");
-	fclose(out);
 }
 
 int reads_correction_can(ReadsCorrectionOptions& rco)
@@ -254,7 +250,6 @@ int reads_correction_can(ReadsCorrectionOptions& rco)
 		sprintf(process_info, "processing %s", iter->file_name.c_str());
 		DynamicTimer dtimer(process_info);
 		INDEX.fetch_and(0);
-		std::cerr << "cache: " << rco.cache <<"\n";
 		if(rco.cache == 1)
 			consensus_one_partition_can_cache(iter->file_name.c_str(), iter->min_seq_id, iter->max_seq_id, rco, reads, out, true);
 		else
@@ -262,6 +257,8 @@ int reads_correction_can(ReadsCorrectionOptions& rco)
 		FILE* job_finished_out = fopen(job_finished, "w");
 		fclose(job_finished_out);
 	}
-	
+	std::ostringstream cmd;
+	cmd << "rm " << rco.m4 << "*";
+	system(cmd.str().c_str());
 	return 0;
 }

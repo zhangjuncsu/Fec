@@ -60,7 +60,9 @@
         "cinttypes": "cpp",
         "typeindex": "cpp",
         "typeinfo": "cpp",
-        "FEC_AlnGraphBoost.C": "cpp"
+        "FEC_AlnGraphBoost.C": "cpp",
+        "variant": "cpp",
+        "*.ipp": "cpp"
     },
     "python.pythonPath": "/usr/bin/python"
 }

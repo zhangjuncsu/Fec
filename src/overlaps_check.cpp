@@ -11,7 +11,7 @@
 #include "overlaps_check.h"
 #include "../common/alignment.h"
 
-const int MIN_COV = 20;
+int MIN_COV = 20;
 const int MAX_CANDIDATE = 200;
 const std::string TARGET_READS = "target_reads.fasta";
 
@@ -196,7 +196,7 @@ idx_t get_num_reads_from_paf(const char *paf_file, const int min_read_size, cons
         paf_ovls[npaf.tid].push_back((uint64_t)npaf.qid << 32 | npaf.bl);
     }
     close_fstream(in);
-    std::cout << __func__ << " size of paf overlap: " << paf_ovls.size() << std::endl;
+    // std::cout << __func__ << " size of paf overlap: " << paf_ovls.size() << std::endl;
     return max_id + 1;
 }
 
@@ -234,9 +234,10 @@ void partition_paf(PackedDB &reads,const char *reads_file, const char *paf_file,
 
     num_files = fix_file_counts(num_files);
     idx_t number, count = 0;
+    MIN_COV = 40;
     std::unordered_map<int, std::vector<uint64_t>>ovls;
     const idx_t num_reads = get_num_reads_from_paf(paf_file, min_read_size, min_cov_ratio, number, name2id, ovls);
-    std::cerr << "first overlap memory usage: " << get_peak_RSS() / 1024 / 1024 << " Mb" << std::endl;
+    // std::cerr << "first overlap memory usage: " << get_peak_RSS() / 1024 / 1024 << " Mb" << std::endl;
     if(so)
         check_overlap(reads, min_cov, ovls, names, name2id);
     for (auto iter = ovls.begin(); iter != ovls.end(); iter++){
@@ -298,7 +299,7 @@ void partition_paf(PackedDB &reads,const char *reads_file, const char *paf_file,
                 index[group_ids[i]].push_back(qid >> 32);
             }
         }
-        std::cerr << "second overlap memory usage: " << get_peak_RSS() / 1024 / 1024 << " Mb" << std::endl;
+        // std::cerr << "second overlap memory usage: " << get_peak_RSS() / 1024 / 1024 << " Mb" << std::endl;
         num_batches = (group_ids.size() + batch_size - 1) / batch_size;
     }else{
         num_batches = (num_reads + batch_size - 1) / batch_size;
@@ -317,7 +318,7 @@ void partition_paf(PackedDB &reads,const char *reads_file, const char *paf_file,
         const int nf = efid - sfid;
         const index_t L = batch_size * sfid;
         const index_t R = batch_size * efid;
-        std::cout << "Lid: " << L << ", Rid: " << R << std::endl;
+        // std::cout << "Lid: " << L << ", Rid: " << R << std::endl;
         prw.OpenFiles(sfid, efid, paf_file, generate_partition_file_name);
         PAF paf, npaf;
         std::ifstream in;
@@ -399,13 +400,14 @@ void partition_paf(PackedDB &reads,const char *reads_file, const char *paf_file,
             if (prw.max_seq_ids[k] == std::numeric_limits<index_t>::min())
                 continue;
             idx_file << prw.file_names[k] << "\t" << prw.min_seq_ids[k] << "\t" << prw.max_seq_ids[k] << "\n";
-            fprintf(stderr, "%s contains reads %d --- %d\n", prw.file_names[k].c_str(), (int)prw.min_seq_ids[k], (int)prw.max_seq_ids[k]);
+            // fprintf(stderr, "%s contains reads %d --- %d\n", prw.file_names[k].c_str(), (int)prw.min_seq_ids[k], (int)prw.max_seq_ids[k]);
         }
 
         prw.CloseFiles();
     }
     close_fstream(idx_file);
-    std::cout << "group ids: " << group_ids.size() << "\tdone: " << done.size() << "\tovls: " << ovls.size() << "\tcount: " << count << std::endl;
+    system("rm target_reads.fasta minimap2output.paf");
+    // std::cout << "group ids: " << group_ids.size() << "\tdone: " << done.size() << "\tovls: " << ovls.size() << "\tcount: " << count << std::endl;
 }
 
 void

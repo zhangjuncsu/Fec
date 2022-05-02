@@ -21,6 +21,8 @@ struct ConsensusOptions
 	int			num_partition_files;
     int    cache;
     int     second_overlapping;
+    bool resuce_long_indel;
+    bool full;
     const char* minimap2_filter;
     const char* overlap_filter;
     std::string minimap2_command;

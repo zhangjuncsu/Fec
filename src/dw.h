@@ -11,6 +11,10 @@
 #include "../common/alignment.h"
 #include "../common/defs.h"
 #include "../common/packed_db.h"
+#include "nanopore/Fec_aligner.h"
+#include "nanopore/Fec_daligner.h"
+#include "nanopore/edlib_wrapper.h"
+#include "nanopore/Fec_extension.h"
 
 namespace ns_banded_sw {
 
@@ -215,12 +219,12 @@ public:
 	static void Rearrange(std::string &alq, std::string &alt);
 	bool TrimEnds(size_t checklen = 1000, int stub = 4);
 
-	size_t query_start{0};
-	size_t query_end{0};
-	size_t query_size{0};
-	size_t target_start{0};
-	size_t target_end{0};
-	size_t target_size{0};
+	int query_start{0};
+	int query_end{0};
+	int query_size{0};
+	int target_start{0};
+	int target_end{0};
+	int target_size{0};
 	std::string aligned_query;
 	std::string aligned_target;
     std::string match_pattern;
@@ -247,6 +251,12 @@ bool GetAlignment(const char* query, const int query_start, const int query_size
 				  DiffRunningData* drd, M5Record& m5, double error_rate, 
 				  const int min_aln_size, 
                   idx_t tid, int qid, AlignmentCache& cache, bool sameDirection, int& ac, int& cc, bool useCache);
+
+bool GetAlignmentNanopore(const char* query, const int query_start, const int query_size,
+				  const char* target, const int target_start, const int target_size,
+				  DiffRunningData* drd, M5Record& m5, double error_rate, 
+				  const int min_aln_size, OcAlignData* align_data, OcDalignData* dalign_data, FullEdlibAlignData* falign_data, 
+                  idx_t tid, int qid, AlignmentCache& cache, bool sameDirection, int& ac, int& cc, bool useCache, bool recuse_long_indel = false);
 
 
 struct TimeCounter {

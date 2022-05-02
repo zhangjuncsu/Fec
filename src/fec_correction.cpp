@@ -34,12 +34,13 @@ struct CompareOverlapByOverlapSize
 };
 
 void
-meap_add_one_aln(const std::string& qaln, const std::string& saln, index_t start_soff, CnsTableItem* cns_table, const char* org_seq)
+meap_add_one_aln(const std::string& qaln, const std::string& saln, index_t start_soff, CnsTableItem* cns_table, const std::vector<char>& org_seq)
 {
 	r_assert(qaln.size() == saln.size());
 	const index_t aln_size = qaln.size();
 	index_t i = 0;
 	const char kGap = '-';
+	for(std::size_t i = 0; i < org_seq.size(); ++i) cns_table[i].base = "ACGT"[org_seq[i]];
 	while (i < aln_size)
 	{
 		const char q = qaln[i];
@@ -159,10 +160,10 @@ output_cns_result(std::vector<CnsResult>& cns_results,
 				  const index_t end,
 				  std::string& cns_seq) 
 {
-	const size_t MaxSeqSize = 60000;
+	const size_t MAXSeqSize = 60000;
 	const size_t OvlpSize = 10000;
 	// BlkSize must be >= OvlpSize
-	const size_t BlkSize = MaxSeqSize - OvlpSize - 1000;
+	const size_t BlkSize = MAXSeqSize - OvlpSize - 1000;
 	
 	const size_t size = cns_seq.size();
 	//if (size <= MaxSeqSize) {
@@ -210,7 +211,8 @@ consensus_worker(CnsTableItem* cns_table,
 				 const int min_cov,
 				 const int min_size,
 				 const int read_id,
-				 std::vector<CnsResult>& cns_results)
+				 std::vector<CnsResult>& cns_results, 
+				 double ratio)
 {
 	index_t beg = 0, end;
 	CnsResult cns_result;
@@ -226,7 +228,7 @@ consensus_worker(CnsTableItem* cns_table,
 			while (beg < R && cns_table[beg].mat_cnt + cns_table[beg].ins_cnt < min_cov) ++beg;
 			end = beg + 1;
 			while (end < R && cns_table[end].mat_cnt + cns_table[end].ins_cnt >= min_cov) ++end;
-			if (end - beg >= 0.95 * min_size)
+			if (end - beg >= ratio * min_size)
 			{
 				meap_consensus_one_segment(cns_table + beg, end - beg, id_list,
 										   beg, cns_vec, aux_qstr, aux_tstr, cns_seq, min_cov);
@@ -316,7 +318,7 @@ consensus_one_read_can(ConsensusThreadData* ctd, const index_t read_id, const in
 				++num_added;
 				used_ids.insert(ec.qid);
 				normalize_gaps(m5qaln(*m5), m5saln(*m5), strlen(m5qaln(*m5)), nqstr, ntstr, true);
-				meap_add_one_aln(nqstr, ntstr, m5soff(*m5), cns_table, tstr.data());
+				meap_add_one_aln(nqstr, ntstr, m5soff(*m5), cns_table, tstr);
 				cns_vec.add_aln(m5soff(*m5), m5send(*m5), nqstr, ntstr);
 			}
 		}
@@ -325,7 +327,74 @@ consensus_one_read_can(ConsensusThreadData* ctd, const index_t read_id, const in
 	cns_vec.get_mapping_ranges(mranges);
 	get_effective_ranges(mranges, eranges, read_size, ctd->rco.min_size);
 
-	consensus_worker(cns_table, ctd->id_list, cns_vec, nqstr, ntstr, eranges, ctd->rco.min_cov, ctd->rco.min_size, read_id,  cns_results);
+	consensus_worker(cns_table, ctd->id_list, cns_vec, nqstr, ntstr, eranges, ctd->rco.min_cov, ctd->rco.min_size, read_id,  cns_results, 0.95);
+}
+
+void
+consensus_one_read_can_nanopore(ConsensusThreadData* ctd, const index_t read_id, const index_t sid, const index_t eid)
+{
+	PackedDB& reads = *ctd->reads;
+	ExtensionCandidate* candidates = ctd->candidates;
+	DiffRunningData* drd_s = ctd->drd_s;
+	DiffRunningData* drd = NULL;
+	M5Record* m5 = ctd->m5;
+	CnsAlns& cns_vec = ctd->cns_alns;
+	std::vector<CnsResult>& cns_results = ctd->cns_results;
+	const index_t read_size = candidates[sid].ssize;
+	std::vector<char>& qstr = ctd->query;
+	std::vector<char>& tstr = ctd->target;
+	tstr.resize(read_size);
+	reads.GetSequence(read_id, true, tstr.data(), read_size);
+	std::string& nqstr = ctd->qaln;
+	std::string& ntstr = ctd->saln;
+	const int min_align_size = ctd->rco.min_align_size;
+	const double min_mapping_ratio = ctd->rco.min_mapping_ratio;
+	
+	std::sort(candidates + sid, candidates + eid, CmpExtensionCandidateByScore());
+	int num_added = 0;
+    int num_ext = 0;
+    const int max_ext = 200;
+	CnsTableItem* cns_table = ctd->cns_table;
+	std::for_each(cns_table, cns_table + read_size, CnsTableItemCleaner());
+	cns_vec.clear();
+	std::set<int> used_ids;
+	u1_t* cov_stats = ctd->id_list;
+	std::fill(cov_stats, cov_stats + MAX_SEQ_SIZE, 0);
+	for (idx_t i = sid; i < eid && num_added < MAX_CNS_OVLPS && num_ext < max_ext; ++i)
+	{
+        ++num_ext;
+		ExtensionCandidate& ec = candidates[i];
+		r_assert(ec.sdir == FWD);
+		if (used_ids.find(ec.qid) != used_ids.end()) continue;
+		qstr.resize(ec.qsize);
+		reads.GetSequence(ec.qid, ec.qdir == FWD, qstr.data(), ec.qsize);
+		index_t qext = ec.qext;
+		index_t sext = ec.sext;
+		if (ec.qdir == REV) qext = ec.qsize - 1 - qext;
+		drd = drd_s;
+		bool r = GetAlignmentNanopore(qstr.data(), qext, qstr.size(), 
+									tstr.data(), sext, tstr.size(), 
+									drd, *m5, 0.50, min_align_size, 
+									ctd->align_data, ctd->dalign_data, 
+									ctd->falign_data, read_id, ec.qid, 
+									ctd->cache_, ec.qdir == FWD, ctd->align_count, 
+									ctd->cache_count, ctd->useCache, ctd->rco.resuce_long_indel);
+		if (r && check_ovlp_mapping_range(m5qoff(*m5), m5qend(*m5), ec.qsize, m5soff(*m5), m5send(*m5), ec.ssize, min_mapping_ratio))
+		{
+			if (check_cov_stats(cov_stats, m5soff(*m5), m5send(*m5)))
+			{
+				++num_added;
+				used_ids.insert(ec.qid);
+				normalize_gaps(m5qaln(*m5), m5saln(*m5), strlen(m5qaln(*m5)), nqstr, ntstr, true);
+				meap_add_one_aln(nqstr, ntstr, m5soff(*m5), cns_table, tstr);
+				cns_vec.add_aln(m5soff(*m5), m5send(*m5), nqstr, ntstr);
+			}
+		}
+	}
+	std::vector<MappingRange> mranges, eranges;
+	eranges.push_back(MappingRange(0, read_size));
+
+	consensus_worker(cns_table, ctd->id_list, cns_vec, nqstr, ntstr, eranges, ctd->rco.min_cov, ctd->rco.min_size, read_id,  cns_results, 0.85);
 }
 
 } // namespace ns_meap_cns {

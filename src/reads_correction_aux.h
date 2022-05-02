@@ -7,6 +7,11 @@
 #include "dw.h"
 #include "../common/packed_db.h"
 #include "options.h"
+extern "C" {
+	#include "nanopore/Fec_extension.h"
+	#include "nanopore/Fec_daligner.h"
+	#include "nanopore/edlib_wrapper.h"
+}
 
 struct CnsTableItem
 {
@@ -129,10 +134,13 @@ struct ConsensusThreadData
 	CnsTableItem* cns_table;
 	uint1* id_list;
 	std::ostream* out;
-ns_banded_sw::AlignmentCache cache_;
-int align_count = 0;
-int cache_count = 0;
-bool useCache = true;
+	OcAlignData* align_data;
+	OcDalignData* dalign_data;
+	FullEdlibAlignData* falign_data;
+    ns_banded_sw::AlignmentCache cache_;
+    int align_count = 0;
+    int cache_count = 0;
+    bool useCache = true;
 	pthread_mutex_t out_lock;
 	
 	ConsensusThreadData(ReadsCorrectionOptions* prco, int tid, PackedDB* r, ExtensionCandidate* ec, int nec, std::ostream* output)
@@ -145,6 +153,11 @@ bool useCache = true;
 		drd_s = new ns_banded_sw::DiffRunningData(ns_banded_sw::get_sw_parameters_small());
 		drd_l = new ns_banded_sw::DiffRunningData(ns_banded_sw::get_sw_parameters_large());
 		m5 = NewM5Record(MAX_SEQ_SIZE);
+		if(prco->tech == 1) {
+			align_data = new_OcAlignData(0.5);
+			dalign_data = new_OcDalignData(0.5);
+			falign_data = new_FullEdlibAlignData(0.5);
+		}
 		out = output;
 		
 		query.reserve(MAX_SEQ_SIZE);
@@ -158,12 +171,17 @@ bool useCache = true;
 	
 	~ConsensusThreadData()
 	{
-std::cout<<"THREAD ID: "<<thread_id<<"\tALIGN COUNT: "<<align_count<<"\tCACHE COUNT: "<<cache_count<<"\tCACHE SIZE: "<<cache_.size()<<std::endl;
 		delete drd_s;
 		delete drd_l;
 		m5 = DeleteM5Record(m5);
+		if(rco.tech == 1) {
+			free_OcAlignData(align_data);
+			free_OcDalignData(dalign_data);
+			free_FullEdlibAlignData(falign_data);
+		}
 		safe_free(cns_table);
 		safe_free(id_list);
+		// std::cerr<<"THREAD ID: "<<thread_id<<"\tALIGN COUNT: "<<align_count<<"\tCACHE COUNT: "<<cache_count<<"\tCACHE SIZE: "<<cache_.size()<<std::endl;
 	}
 };
 

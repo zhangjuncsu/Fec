@@ -600,6 +600,55 @@ bool GetAlignment(const char* query, const int query_start, const int query_size
     }
 }
 
+bool GetAlignmentNanopore(const char* query, const int query_start, const int query_size,
+				  const char* target, const int target_start, const int target_size,
+				  DiffRunningData* drd, M5Record& m5, double error_rate, 
+				  const int min_aln_size, OcAlignData* align_data, OcDalignData* dalign_data, FullEdlibAlignData* falign_data, 
+                  idx_t tid, int qid, AlignmentCache& cache, bool sameDirection, int& ac, int& cc, bool useCache, bool recuse_long_indel)
+{
+    // TimeCounter::Mark m(tc);
+    bool has_id = cache.HasIds(qid) && cache.HasIds(tid);
+    if(!useCache || !has_id || !cache.HasAlignment(tid, qid)){
+        int flag = cns_extension(align_data, dalign_data, falign_data, 
+                                query, query_start, query_size, 
+                                target, target_start, target_size, 
+                                min_aln_size, m5, recuse_long_indel);
+        ac++;
+        if(!flag) return false;
+        AlignmentResult result;
+        m5qdir(m5) = FWD;
+        m5sdir(m5) = FWD;
+        m5qsize(m5) = query_size;
+        m5ssize(m5) = target_size;
+        result.query_start = m5qoff(m5);
+        result.query_end = m5qend(m5);
+        result.query_size = m5qsize(m5);
+        result.target_start = m5soff(m5);
+        result.target_end = m5send(m5);
+        result.target_size = m5ssize(m5);
+        result.aligned_query = m5qaln(m5);
+        result.aligned_target = m5saln(m5);
+        result.match_pattern = m5pat(m5);
+	    if(cache.HasIds(qid) && cache.HasIds(tid)) cache.SetAlignment(qid, tid, result);
+        return true;
+    }else {
+        cc++;
+        AlignmentResult result = cache.GetAlignment(tid, qid, sameDirection);
+        m5qoff(m5) = result.query_start;
+        m5qend(m5) = result.query_end;
+        m5qsize(m5) = result.query_size;
+        m5qdir(m5) = FWD;
+        m5soff(m5) = result.target_start;
+        m5send(m5) = result.target_end;
+        m5ssize(m5) = result.target_size;
+        m5sdir(m5) = FWD;
+        strcpy(m5qaln(m5), result.aligned_query.c_str());
+        strcpy(m5saln(m5), result.aligned_target.c_str());
+        strcpy(m5pat(m5), result.match_pattern.c_str());
+        return true;
+    }
+}
+
 const unsigned char TABLE[256] = {
      0,   1,	2,	 3,	  4,   5,	6,	 7,	  8,   9,  10,	11,	 12,  13,  14,	15,
 	 16,  17,  18,	19,	 20,  21,  22,	23,	 24,  25,  26,	27,	 28,  29,  30,	31,
