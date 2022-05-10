@@ -3,7 +3,7 @@
 #include "Fec_aligner.h"
 #include "Fec_daligner.h"
 #include "edlib_wrapper.h"
-#include "common/alignment.h"
+#include "../common/alignment.h"
 
 BOOL
 cns_extension(OcAlignData* align_data,
