@@ -70,10 +70,6 @@ void print_default_options() {
 		 << '-' << window_n << ' ' << MINIMAP2_w 
 		 << ' ' 
 		 << '-' << hpc_n 
-		 << ' '  
-		 << '-' << recuse_n 
-		 << ' ' 
-		 << '-' << full_n
 		 <<"\n";
 }
 

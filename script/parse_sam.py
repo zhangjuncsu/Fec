@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import re
 import argparse
 
@@ -31,7 +33,7 @@ def parse_sam(sam_file: str):
     coverages = {}
     processed = set()
     for line in open(sam_file):
-        if '@SQ' in line:
+        if line.startswith('@SQ'):
             items = line.split('\t')
             name = items[1].strip()[3:]
             length = int(items[2].strip()[3:])
